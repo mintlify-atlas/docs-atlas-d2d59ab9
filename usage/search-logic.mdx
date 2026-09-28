@@ -4,7 +4,9 @@ sidebarTitle: "Search Logic"
 description: "Understand the exact matching logic, DNI normalization steps, and per-sheet column mapping used when Proyecto Sheets searches all 7 worksheets."
 ---
 
-Every search in Proyecto Sheets — whether triggered from the CLI menu or the GUI's Buscar button — follows the same core algorithm: iterate over all rows in all 7 worksheets in declaration order, apply any sheet-specific cleaning function to the DNI column, then compare the cleaned value to the user-supplied string using strict equality. No fuzzy matching, prefix matching, or case folding is involved.
+Every search in Proyecto Sheets iterates over all rows in all 7 worksheets in declaration order, applies any sheet-specific cleaning to the DNI column, and then compares the cleaned value to the user-supplied string using strict equality. No fuzzy matching, prefix matching, or case folding is involved.
+
+The two entry points implement this differently. The CLI (`main.py`) uses inline `for` loops written directly for each sheet, with no shared configuration structure and no bounds check on row length. The GUI (`interfaz_prueba.py`) drives the same search through `SHEETS_CONFIG` — a list of per-sheet dictionaries — and adds a `len(dato) <= col_dni` guard that silently skips short rows. The column indices, cleaning functions, and output formats documented below reflect `SHEETS_CONFIG` as defined in `interfaz_prueba.py`; the CLI uses the same indices and the same cleaning approach but applies them in separate per-sheet blocks.
 
 ## Search flow
 
@@ -13,23 +15,22 @@ Every search in Proyecto Sheets — whether triggered from the CLI menu or the G
     The user supplies a sequence of digit characters. Both the CLI (`str.isdigit()` loop) and the GUI (`_validar_entrada_dni` per-keystroke validator) guarantee that only digits reach the search routine.
   </Step>
 
-  <Step title="Iterate over each sheet in SHEETS_CONFIG order">
-    For each of the 7 sheets, the search reads `col_dni` from every row in the in-memory cache. If a cleaning function (`limpiar`) is configured for the sheet, it is applied to the raw cell value before comparison:
+  <Step title="Iterate over each sheet in declaration order">
+    For each of the 7 sheets, the search reads the DNI column from every row in the in-memory cache. In the GUI, the `SHEETS_CONFIG` entry supplies a `limpiar` function that is applied before comparison and written back to the cached row:
 
     ```python
+    # GUI (interfaz_prueba.py) — driven by SHEETS_CONFIG
     valor = dato[col_dni]
     if limpiar_fn is not None:
         valor = limpiar_fn(valor, min_len)
         dato[col_dni] = valor   # cached in-place
-    ```
 
-    The cleaned value is then compared with the target DNI:
-
-    ```python
     if valor == dni_buscar:
         encontrado = True
         contador += 1
     ```
+
+    The CLI (`main.py`) applies an equivalent inline cleaning block directly inside each sheet's `for` loop, without a shared configuration structure.
   </Step>
 
   <Step title="Emit match output">

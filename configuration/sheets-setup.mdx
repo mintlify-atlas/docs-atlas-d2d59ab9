@@ -31,24 +31,24 @@ The table below lists each worksheet in the order it must appear in Google Sheet
 | Index | Worksheet Name | DNI Column (0-based) | Key Fields Used | Program |
 |---|---|---|---|---|
 | 0 | Oficina de Empleo | 2 | col 1 (nombre) | Oficina de Empleo |
-| 1 | Desarrollo Agrario | 2 | col 0 (apellido), col 1 (nombre) | Huertas Familiares |
-| 2 | Registro Recepción | 6 | col 2 (apellido), col 3 (nombre) | Fortalecimiento de Trayectorias Laborales |
-| 3 | Inscripción Cuatrimestral | 5 | col 2 (apellido), col 3 (nombre) | Capacitación Laboral |
-| 4 | Formulario Inscripción | 39 | col 37 (nombre), col 38 (apellido) | Inserción Laboral |
-| 5 | Nominalización | 9 | col 7 (nombre), col 8 (apellido) | Plan Fines |
-| 6 | Usuarios | 5 | col 1 (apellido), col 2 (nombre) | Registro TREP |
+| 1 | Desarrollo Agrario | 2 | col 1 (apellido), col 0 (nombre) | Huertas Familiares |
+| 2 | Registro Recepción | 6 | col 3 (apellido), col 2 (nombre) | Fortalecimiento de Trayectorias Laborales |
+| 3 | Inscripción Cuatrimestral | 5 | col 3 (apellido), col 2 (nombre) | Capacitación Laboral |
+| 4 | Formulario Inscripción | 39 | col 37 (apellido), col 38 (nombre) | Inserción Laboral |
+| 5 | Nominalización | 9 | col 7 (apellido), col 8 (nombre) | Plan Fines |
+| 6 | Usuarios | 5 | col 2 (apellido), col 1 (nombre) | Registro TREP |
 
 The worksheet objects are retrieved by index at startup:
 
 ```python
 # main.py
-oficina_empleo           = proyecto_sheets.get_worksheet(0)
-desarrollo_agrario       = proyecto_sheets.get_worksheet(1)
-registro_recepcion       = proyecto_sheets.get_worksheet(2)
+oficina_empleo            = proyecto_sheets.get_worksheet(0)
+desarrollo_agrario        = proyecto_sheets.get_worksheet(1)
+registro_recepcion        = proyecto_sheets.get_worksheet(2)
 inscripcion_cuatrimestral = proyecto_sheets.get_worksheet(3)
-formulario_inscripcion   = proyecto_sheets.get_worksheet(4)
-nominalizacion           = proyecto_sheets.get_worksheet(5)
-usuarios                 = proyecto_sheets.get_worksheet(6)
+formulario_inscripcion    = proyecto_sheets.get_worksheet(4)
+nominalizacion            = proyecto_sheets.get_worksheet(5)
+usuarios                  = proyecto_sheets.get_worksheet(6)
 ```
 
 <Warning>
@@ -57,24 +57,17 @@ usuarios                 = proyecto_sheets.get_worksheet(6)
 
 ## DNI format notes
 
-Most worksheets store DNI values as plain digit strings. However, worksheets at index 4 (**Formulario Inscripción**), 5 (**Nominalización**), and 6 (**Usuarios**) may contain DNI values embedded in a longer string — for example mixed with formatting characters or surrounding text. Proyecto Sheets normalises these values before comparison using two helper functions:
+Most worksheets store DNI values as plain digit strings. However, worksheets at index 4 (**Formulario Inscripción**), 5 (**Nominalización**), and 6 (**Usuarios**) may contain DNI values embedded in a longer string — for example mixed with formatting characters or surrounding text. Proyecto Sheets normalises these values before comparison using the `_limpiar_recorte` helper function, which all seven worksheets share:
 
 ```python
 def _limpiar_recorte(valor, min_len):
     """Extracts digits and drops the first 2 and the last digit found.
-    Used for Formulario Inscripción and Nominalización."""
+    Used for all worksheets where the DNI column may contain extra characters."""
     if len(valor) >= min_len:
         digitos = [c for c in valor if c.isdigit()]
         if len(digitos) >= 10:
             digitos = digitos[2:-1]
         return "".join(digitos)
-    return valor
-
-
-def _limpiar_solo_digitos(valor, min_len):
-    """Extracts only the digit characters. Used for Usuarios."""
-    if len(valor) >= min_len:
-        return "".join(c for c in valor if c.isdigit())
     return valor
 ```
 

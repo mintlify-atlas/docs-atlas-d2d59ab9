@@ -1,5 +1,5 @@
 ---
-title: "Get Started with Proyecto Sheets in 5 Steps"
+title: "Quickstart: Set Up and Run Proyecto Sheets IMDEL DNI Finder"
 sidebarTitle: "Quickstart"
 description: "Install dependencies, configure your Google service account, and run your first DNI search with Proyecto Sheets in under 10 minutes."
 ---
@@ -47,7 +47,7 @@ By the end of this page you will have Proyecto Sheets cloned, its single depende
     CREDENTIALS_FILE = "proyecto-sheets-505320-bb8ae069f096.json"
     ```
 
-    If you generate a new key file with a different name, update this constant (and the matching `filename=` argument in `main.py`) to reflect the new filename.
+    If you generate a new key file with a different name, update this constant in `interfaz_prueba.py`. Note that `main.py` hardcodes the filename directly in the `gc.open()` call — update it there as well if needed.
 
     <Warning>
       The credentials file contains a private key that grants full API access to your Google Cloud project. It is already listed in `.gitignore` — **never commit it to version control or share it publicly.** If the key is exposed, revoke it immediately in the Google Cloud Console and generate a replacement.
@@ -55,7 +55,7 @@ By the end of this page you will have Proyecto Sheets cloned, its single depende
   </Step>
 
   <Step title="Share the Spreadsheet with Your Service Account">
-    The tool connects to the spreadsheet identified by the `SHEET_NAME` constant:
+    The GUI connects to the spreadsheet identified by the `SHEET_NAME` constant in `interfaz_prueba.py`:
 
     ```python
     SHEET_NAME = "Tablas IMDEL Prototipo"
@@ -63,7 +63,7 @@ By the end of this page you will have Proyecto Sheets cloned, its single depende
 
     For the connection to succeed, the **service account email** (found inside the credentials JSON under the `"client_email"` key) must have at least **Viewer** access to this spreadsheet. Open the spreadsheet in Google Sheets, click **Share**, paste the service account email, and grant Viewer (or Editor) access.
 
-    If the spreadsheet name ever changes, update `SHEET_NAME` in both `main.py` and `interfaz_prueba.py` to match.
+    If the spreadsheet name ever changes, update `SHEET_NAME` in `interfaz_prueba.py` and the string literal inside `gc.open(...)` in `main.py` to match.
 
     For detailed instructions on creating a service account and enabling the Sheets API, see [Service Account Configuration](/configuration/credentials).
   </Step>
@@ -87,7 +87,7 @@ By the end of this page you will have Proyecto Sheets cloned, its single depende
 
     The CLI connects, loads all worksheets, then presents an interactive menu:
 
-    ```
+    ```text
     Conectando a Google Sheets...
     Cargando hojas...
     Cargando datos de las hojas...

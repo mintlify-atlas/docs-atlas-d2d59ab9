@@ -48,6 +48,8 @@ Clicking **Actualizar bases de datos** calls `actualizar_bases()`, which spawns 
 
 Search output is displayed in a `ScrolledText` widget at the bottom of the window. It is configured as read-only (state `"disabled"` between writes) with a monospace **Consolas 10pt** font so columns align cleanly. After each write, `see("end")` is called to keep the latest result visible without manual scrolling.
 
+After each sheet's match block is written, a `"----------------------------------------"` separator line (40 dashes, `"-" * 40`) is appended by `_escribir_resultado` to visually divide results from different programs. If no match is found across any sheet the separator is omitted and the not-found message is written alone.
+
 ## Threading model
 
 `BuscadorApp` uses Python's `threading.Thread` with `daemon=True` for all blocking I/O:

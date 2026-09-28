@@ -1,5 +1,5 @@
 ---
-title: "Proyecto Sheets: IMDEL Beneficiary Search Tool"
+title: "Proyecto Sheets: DNI Search Tool for IMDEL Programs"
 sidebarTitle: "Introduction"
 description: "Learn what Proyecto Sheets does, which IMDEL programs it covers, and how the DNI search engine works across 7 Google Sheets worksheets."
 ---
@@ -49,7 +49,171 @@ Because the cache is loaded once at startup, data added to the spreadsheet after
 
 ### DNI Normalisation
 
-Some worksheets store the DNI column with surrounding text or formatting characters (e.g. `"DNI: 12345678X"`). Before comparing, the tool strips non-digit characters and trims leading/trailing noise so that raw DNI numbers entered by the user always match. The normalised value is written back into the in-memory row so the cost is paid only once per row across repeated searches.
+Some worksheets store the DNI column with additional characters mixed into the value (for example, a form response column may contain a full formatted string alongside the digits). Before comparing, the tool extracts only the digit characters and, where the raw value exceeds a minimum length, trims two leading digits and one trailing digit to isolate the eight-digit DNI. The normalised value is written back into the in-memory row so the cost is paid only once per row across repeated searches. See [`_limpiar_recorte`](#_limpiar_recorte) and [`_limpiar_solo_digitos`](#_limpiar_solo_digitos) below for details.
+
+## API Reference
+
+The sections below document every public constant, function, and class in the codebase.
+
+### Constants (`interfaz_prueba.py`)
+
+**`CREDENTIALS_FILE`** — `str`
+
+Path to the Google Cloud service account JSON key file, relative to the project root. Passed directly to `gspread.service_account(filename=CREDENTIALS_FILE)`.
+
+```python
+CREDENTIALS_FILE = "proyecto-sheets-505320-bb8ae069f096.json"
+```
+
+**`SHEET_NAME`** — `str`
+
+Name of the Google Sheets document to open. Passed to `gc.open(SHEET_NAME)`.
+
+```python
+SHEET_NAME = "Tablas IMDEL Prototipo"
+```
+
+**`SHEETS_CONFIG`** — `list[dict]`
+
+A list of seven dictionaries, one per program worksheet, that drives all data loading and search logic in the GUI. Each dictionary has the following keys:
+
+| Key | Type | Description |
+|---------------------|-------------------------------|---------------------------------------------------------------|
+| `nombre_interno` | `str` | Unique key used to store the worksheet's rows in `self.registros`. |
+| `worksheet_index` | `int` | Zero-based index of the worksheet within the spreadsheet. |
+| `col_dni` | `int` | Zero-based column index where the DNI value is stored. |
+| `limpiar` | `callable \| None` | DNI cleaning function applied before comparison. |
+| `min_len` | `int` | Minimum raw-value length that triggers the cleaning function. |
+| `formatear` | `callable` | Lambda `(dato) -> str` that formats a matched row for display. |
+
+---
+
+### `gspread.service_account(filename)`
+
+Authenticates with the Google Sheets API using a service account JSON key file and returns a `gspread.Client` instance. Called once at startup.
+
+```python
+gc = gspread.service_account(filename=CREDENTIALS_FILE)
+```
+
+---
+
+### `gc.open(title)`
+
+Opens the Google Sheets spreadsheet by its display name and returns a `gspread.Spreadsheet` object.
+
+```python
+proyecto_sheets = gc.open(SHEET_NAME)           # interfaz_prueba.py
+proyecto_sheets = gc.open("Tablas IMDEL Prototipo")  # main.py
+```
+
+---
+
+### `proyecto_sheets.get_worksheet(index)`
+
+Returns a `gspread.Worksheet` object for the worksheet at the given zero-based index. Called for each of the seven program sheets at startup.
+
+```python
+oficina_empleo = proyecto_sheets.get_worksheet(0)
+desarrollo_agrario = proyecto_sheets.get_worksheet(1)
+# … and so on through index 6
+```
+
+---
+
+### `worksheet.get_all_values()`
+
+Returns all cells in the worksheet as a list of lists of strings (`list[list[str]]`), one inner list per row. This is the format stored in the in-memory cache and iterated during every search.
+
+```python
+registros_oficina_empleo = oficina_empleo.get_all_values()
+```
+
+---
+
+### `actualizar_bases()` — CLI
+
+Defined in `main.py`. Re-fetches all seven worksheets from Google Sheets and replaces the global in-memory variables. Called when the user selects option `2` from the interactive menu.
+
+```python
+def actualizar_bases():
+    global registros_oficina_empleo, registros_desarrollo_agrario, ...
+    registros_oficina_empleo = oficina_empleo.get_all_values()
+    # … repeated for all seven sheets
+```
+
+---
+
+### `_limpiar_recorte(valor, min_len)`
+
+Defined in `interfaz_prueba.py`. Extracts all digit characters from `valor` and, if at least 10 digits are found, discards the first two and the last one before joining them back into a string. This isolates the eight-digit DNI from values that embed it alongside other numeric characters (e.g., form-response columns in worksheets 4 and 5).
+
+```python
+def _limpiar_recorte(valor, min_len):
+    if len(valor) >= min_len:
+        digitos = [c for c in valor if c.isdigit()]
+        if len(digitos) >= 10:
+            digitos = digitos[2:-1]
+        return "".join(digitos)
+    return valor
+```
+
+Used in `SHEETS_CONFIG` for all seven worksheet entries.
+
+---
+
+### `_limpiar_solo_digitos(valor, min_len)`
+
+Defined in `interfaz_prueba.py`. Extracts only the digit characters from `valor` without any trimming. Intended for values that contain surrounding non-numeric text but no extra leading or trailing digits.
+
+```python
+def _limpiar_solo_digitos(valor, min_len):
+    if len(valor) >= min_len:
+        return "".join(c for c in valor if c.isdigit())
+    return valor
+```
+
+---
+
+### `class BuscadorApp`
+
+Defined in `interfaz_prueba.py`. The main Tkinter application class. Instantiated with a `tk.Tk` root window; builds the full UI and starts the background connection thread immediately on construction.
+
+```python
+root = tk.Tk()
+app = BuscadorApp(root)
+root.mainloop()
+```
+
+**Key instance attributes:**
+
+| Attribute | Type | Description |
+|----------------------|------------------------|------------------------------------------------------|
+| `self.gc` | `gspread.Client` | Authenticated gspread client. |
+| `self.proyecto_sheets` | `gspread.Spreadsheet` | Open spreadsheet object. |
+| `self.worksheets` | `dict[str, Worksheet]` | Maps `nombre_interno` → worksheet object. |
+| `self.registros` | `dict[str, list]` | Maps `nombre_interno` → cached rows from `get_all_values()`. |
+| `self.conectado` | `bool` | `True` once the initial connection and load succeed. |
+
+---
+
+### `BuscadorApp.buscar_dni()`
+
+Reads the DNI from the entry field, iterates over all entries in `SHEETS_CONFIG`, applies the appropriate `limpiar` function to each row's DNI column, and writes any matches to the scrollable results area. Validates that the input is non-empty and contains only digits before searching. Caches the cleaned DNI value back into the in-memory row on first match.
+
+```python
+app.buscar_dni()   # also triggered by pressing Enter in the DNI field
+```
+
+---
+
+### `BuscadorApp.actualizar_bases()`
+
+Triggers a background thread that calls `get_all_values()` on every worksheet and refreshes `self.registros`. Disables all controls while the refresh is in progress and re-enables them on completion or error.
+
+```python
+app.actualizar_bases()   # also triggered by the "Actualizar bases de datos" button
+```
 
 ## Prerequisites
 

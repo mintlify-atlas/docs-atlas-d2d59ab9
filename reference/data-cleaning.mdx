@@ -1,5 +1,5 @@
 ---
-title: "DNI Normalization Functions in Proyecto Sheets"
+title: "DNI Normalization Functions – Proyecto Sheets IMDEL"
 sidebarTitle: "Data Cleaning"
 description: "Reference for _limpiar_recorte and _limpiar_solo_digitos: the two functions that normalize malformed DNI values before comparison."
 ---
@@ -40,7 +40,7 @@ def _limpiar_recorte(valor, min_len):
 
 | Input | Digits extracted | After `[2:-1]` slice | Output |
 |---|---|---|---|
-| `"011-12345678-0"` | `["0","1","1","1","2","3","4","5","6","7","8","0"]` (12 digits) | indices 2 → 10 | `"12345678"` |
+| `"54-12345678-9"` | `["5","4","1","2","3","4","5","6","7","8","9"]` (11 digits) | indices 2 → 9 | `"12345678"` |
 | `"12345678"` (len=8 < 9) | *(not triggered)* | *(not triggered)* | `"12345678"` |
 
 **Used by:** all seven sheets currently defined in `SHEETS_CONFIG` (`oficina_empleo`, `desarrollo_agrario`, `registro_recepcion`, `inscripcion_cuatrimestral`, `formulario_inscripcion`, `nominalizacion`, `usuarios`).
