@@ -1,0 +1,90 @@
+---
+title: "DNI Normalization Functions in Proyecto Sheets"
+sidebarTitle: "Data Cleaning"
+description: "Reference for _limpiar_recorte and _limpiar_solo_digitos: the two functions that normalize malformed DNI values before comparison."
+---
+
+Some IMDEL worksheets store the DNI as part of a longer string — for example, embedded inside a phone number, prefixed with a country or area code, or surrounded by punctuation. Because the search compares cell values to a plain digit string typed by the operator, these raw values must be normalized before the equality check. Two helper functions in `interfaz_prueba.py` handle this normalization. Both share the same signature and are designed to be assigned to the `limpiar` key of a `SHEETS_CONFIG` descriptor.
+
+---
+
+## `_limpiar_recorte(valor, min_len)`
+
+```python
+def _limpiar_recorte(valor, min_len):
+    """Extrae los digitos de un valor y descarta los primeros 2 y el
+    ultimo digito encontrado."""
+    if len(valor) >= min_len:
+        digitos = [c for c in valor if c.isdigit()]
+        if len(digitos) >= 10:
+            digitos = digitos[2:-1]
+        return "".join(digitos)
+    return valor
+```
+
+**Parameters**
+
+- `valor` (`str`) — raw cell value read directly from the spreadsheet.
+- `min_len` (`int`) — minimum length of `valor` that triggers cleaning. If `len(valor) < min_len` the value is returned unchanged, avoiding false modifications of short or empty cells.
+
+**Returns** — a normalized DNI string, or the original `valor` if it is shorter than `min_len`.
+
+**Logic**
+
+1. If `len(valor) >= min_len`, collect every character in `valor` that is a digit (`c.isdigit()`).
+2. If the resulting digit list contains 10 or more digits, discard the first two and the last one with the slice `[2:-1]`. This strips a leading country/area-code prefix (e.g. `011`) and a trailing check or extension digit.
+3. Join the remaining digits and return them.
+4. If `len(valor) < min_len`, return `valor` as-is without any modification.
+
+**Worked example**
+
+| Input | Digits extracted | After `[2:-1]` slice | Output |
+|---|---|---|---|
+| `"011-12345678-0"` | `["0","1","1","1","2","3","4","5","6","7","8","0"]` (12 digits) | indices 2 → 10 | `"12345678"` |
+| `"12345678"` (len=8 < 9) | *(not triggered)* | *(not triggered)* | `"12345678"` |
+
+**Used by:** all seven sheets currently defined in `SHEETS_CONFIG` (`oficina_empleo`, `desarrollo_agrario`, `registro_recepcion`, `inscripcion_cuatrimestral`, `formulario_inscripcion`, `nominalizacion`, `usuarios`).
+
+---
+
+## `_limpiar_solo_digitos(valor, min_len)`
+
+```python
+def _limpiar_solo_digitos(valor, min_len):
+    """Extrae solo los digitos de un valor."""
+    if len(valor) >= min_len:
+        return "".join(c for c in valor if c.isdigit())
+    return valor
+```
+
+**Parameters**
+
+- `valor` (`str`) — raw cell value read from the spreadsheet.
+- `min_len` (`int`) — minimum length that triggers cleaning. Shorter values are returned unchanged.
+
+**Returns** — a string containing only the digit characters of `valor`, or the original `valor` if it is shorter than `min_len`.
+
+**Logic**
+
+If `len(valor) >= min_len`, join every character in `valor` for which `c.isdigit()` is `True`. Unlike `_limpiar_recorte`, this function does **not** slice the resulting digit list — it retains all digits, including any leading or trailing ones.
+
+<Note>
+  `_limpiar_solo_digitos` is defined in `interfaz_prueba.py` but is not currently assigned as the `limpiar` function in any `SHEETS_CONFIG` entry. It is available for future worksheet descriptors where the DNI cell contains non-digit characters (spaces, dashes, dots) but no extraneous leading or trailing digit groups that need to be discarded.
+</Note>
+
+---
+
+## In-place caching
+
+After `_limpiar_recorte` (or any `limpiar` function) produces a cleaned value, the search loop writes it back into the row list:
+
+```python
+valor = limpiar_fn(valor, min_len)
+dato[col_dni] = valor  # cache the cleaned value in-place
+```
+
+This means the normalization is performed at most once per row per session. On a subsequent search within the same session, the cell at `dato[col_dni]` already holds the cleaned string, so the cleaning function is still called but returns the value unchanged (the cleaned string is shorter than the original, so it may fall below `min_len` and be returned as-is, or it passes through digit extraction harmlessly).
+
+<Note>
+  This in-place mutation makes normalization a one-way transformation within a session. The original raw data from Google Sheets is overwritten in memory and cannot be recovered without a fresh load. Pressing **Actualizar bases de datos** in the GUI (or option `2` in the CLI) re-calls `get_all_values()` on every worksheet and replaces the in-memory cache entirely, restoring the original raw values and allowing cleaning to run again from scratch.
+</Note>

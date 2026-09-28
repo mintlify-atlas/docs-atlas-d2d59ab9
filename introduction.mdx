@@ -1,0 +1,75 @@
+---
+title: "Proyecto Sheets: IMDEL Beneficiary Search Tool"
+sidebarTitle: "Introduction"
+description: "Learn what Proyecto Sheets does, which IMDEL programs it covers, and how the DNI search engine works across 7 Google Sheets worksheets."
+---
+
+Proyecto Sheets is a Python desktop tool that lets IMDEL staff look up any beneficiary across all active social programs in seconds. Enter a DNI (Documento Nacional de Identidad) number and the tool queries a single Google Sheets spreadsheet — **Tablas IMDEL Prototipo** — that spans seven worksheets, one per program. Results show the beneficiary's full name, coordination, and program name. The tool ships with two interfaces: a command-line script (`main.py`) for quick scripting and testing, and a Tkinter GUI (`interfaz_prueba.py`) for everyday desktop use.
+
+## Covered Programs
+
+All seven worksheets live inside the same Google Sheets document. The table below lists each worksheet by its zero-based index, coordination area, and program name, exactly as they are accessed in code.
+
+| Index | Coordination | Program |
+|-------|-----------------------------------|------------------------------------------------------|
+| `0` | — | Oficina de Empleo |
+| `1` | Desarrollo Agrario | Huertas Familiares |
+| `2` | Capacitación Laboral y Empleo | Fortalecimiento de Trayectorias Laborales |
+| `3` | Capacitación Laboral y Empleo | Capacitación Laboral |
+| `4` | Capacitación Laboral y Empleo | Inserción Laboral |
+| `5` | Capacitación Laboral y Empleo | Plan Fines |
+| `6` | Economía Popular | Registro de Trabajadores de la Economía Popular |
+
+The worksheets are opened with `gspread`'s `get_worksheet(index)` method at startup. All seven are loaded in a single pass before the first search is allowed.
+
+## Architecture
+
+Both interfaces share the same data-access logic and differ only in how they present input and output.
+
+<CardGroup cols={2}>
+  <Card title="CLI (main.py)" icon="terminal">
+    Runs a blocking input loop. On startup it connects to Google Sheets, loads all worksheets into memory, then presents a three-option menu: **search by DNI**, **refresh data**, or **exit**. Suitable for scripting, one-off lookups, and troubleshooting.
+  </Card>
+  <Card title="GUI (interfaz_prueba.py)" icon="desktop">
+    A `tkinter` window that connects and loads data on a background thread so the UI stays responsive. Provides a DNI text field, a **Buscar** button, an **Actualizar bases de datos** button, and a scrollable results area. Recommended for day-to-day staff use.
+  </Card>
+</CardGroup>
+
+### Connection
+
+Both interfaces authenticate with Google Sheets through a **service account** using `gspread.service_account(filename=CREDENTIALS_FILE)`. The connection is established once at startup; the `gspread` client object is reused for the lifetime of the session.
+
+### In-Memory Caching
+
+After the initial load, every worksheet is stored as a plain Python list of rows (`get_all_values()`) in memory. Searches iterate over these in-memory lists — no network call is made during a DNI lookup. This keeps searches instantaneous even for large sheets.
+
+### On-Demand Refresh
+
+Because the cache is loaded once at startup, data added to the spreadsheet after launch is not reflected automatically. Both interfaces expose an explicit **refresh** action (`option 2` in the CLI; the **Actualizar bases de datos** button in the GUI) that re-fetches all worksheets from Google Sheets and replaces the in-memory cache.
+
+### DNI Normalisation
+
+Some worksheets store the DNI column with surrounding text or formatting characters (e.g. `"DNI: 12345678X"`). Before comparing, the tool strips non-digit characters and trims leading/trailing noise so that raw DNI numbers entered by the user always match. The normalised value is written back into the in-memory row so the cost is paid only once per row across repeated searches.
+
+## Prerequisites
+
+Before running either interface, make sure the following are in place.
+
+<CardGroup cols={2}>
+  <Card title="Python 3.x" icon="python">
+    Any Python 3 release. No build tools required — the project is pure Python.
+  </Card>
+  <Card title="gspread" icon="table">
+    The only third-party dependency. Install with `pip install gspread`. Handles authentication and all Sheets API calls.
+  </Card>
+  <Card title="tkinter" icon="window">
+    Required only for the GUI. Ships with the standard CPython distribution on Windows and macOS. On Debian/Ubuntu install `python3-tk` if missing.
+  </Card>
+  <Card title="Google Cloud Service Account" icon="key">
+    A service account with the Sheets API enabled, plus a JSON key file downloaded from the Google Cloud Console. The spreadsheet must be shared with the service account email.
+  </Card>
+</CardGroup>
+
+<Note>
+  The credentials JSON file must be placed in the **same directory as the script** and its filename must match the `CREDENTIALS_FILE` constant in `interfaz_prueba.py`. This file contains a private key and must **never** be committed to version control — it is already listed in `.gitignore`.
+</Note>

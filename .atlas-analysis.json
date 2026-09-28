@@ -1,0 +1,69 @@
+{
+  "projectType": "saas",
+  "projectName": "Proyecto Sheets – Buscador IMDEL",
+  "projectDescription": "A Python desktop tool that searches Google Sheets beneficiary records across multiple IMDEL social programs by DNI, with both a CLI and a Tkinter GUI interface.",
+  "theme": "luma",
+  "primaryColor": "#2563EB",
+  "lightColor": "#EFF6FF",
+  "darkColor": "#1E40AF",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/credentials",
+              "configuration/sheets-setup"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "usage/cli",
+              "usage/gui",
+              "usage/search-logic"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/sheets-config",
+              "reference/data-cleaning",
+              "reference/faq"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "DNI-based beneficiary lookup across 7 Google Sheets worksheets in a single query",
+    "Automatic DNI normalization for sheets with mixed-format DNI fields",
+    "CLI mode for terminal usage (main.py)",
+    "Tkinter GUI with threaded connection and real-time status (interfaz_prueba.py)",
+    "On-demand data refresh without restarting the application",
+    "Multi-program coverage: Oficina de Empleo, Desarrollo Agrario, Capacitación Laboral, Inserción Laboral, Plan Fines, Economía Popular"
+  ],
+  "publicApiSurface": [
+    "gspread.service_account(filename) — authenticates with Google Sheets via service account",
+    "gc.open(sheet_name) — opens the target spreadsheet",
+    "proyecto_sheets.get_worksheet(index) — accesses individual worksheets by index",
+    "worksheet.get_all_values() — fetches all rows from a worksheet",
+    "actualizar_bases() — reloads all worksheet data from Google Sheets",
+    "BuscadorApp.__init__(root) — initialises the Tkinter GUI application",
+    "BuscadorApp.buscar_dni() — runs a DNI search across all configured worksheets",
+    "BuscadorApp.actualizar_bases() — triggers a background data reload",
+    "_limpiar_recorte(valor, min_len) — normalises DNI values with extra leading/trailing digits",
+    "_limpiar_solo_digitos(valor, min_len) — strips non-digit characters from a DNI value",
+    "SHEETS_CONFIG — list of worksheet descriptor dicts (nombre_interno, worksheet_index, col_dni, limpiar, min_len, formatear)"
+  ]
+}

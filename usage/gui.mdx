@@ -1,0 +1,66 @@
+---
+title: "Search Beneficiaries with the Tkinter Desktop GUI"
+sidebarTitle: "GUI Mode"
+description: "Launch the BuscadorApp Tkinter window to search IMDEL beneficiary records with a point-and-click interface and background data loading."
+---
+
+`interfaz_prueba.py` provides a `BuscadorApp` class that wraps all search logic in a Tkinter desktop window. Authentication and data loading happen in a background thread when the window opens, so the interface remains responsive immediately — you can see the status label update and interact with controls as soon as they become available.
+
+## Launching
+
+```bash
+python interfaz_prueba.py
+```
+
+The window opens with the title **Buscador de beneficiarios - IMDEL** at a default size of 640 × 560 px (resizable). The status bar will read `Conectando a Google Sheets...` while the background thread works through authentication and data loading.
+
+## Interface overview
+
+### Status bar
+
+A label at the top of the window reflects the current connection state. It transitions through the following values automatically:
+
+| Status text | Meaning |
+|-------------|---------|
+| `Conectando a Google Sheets...` | Background thread is authenticating and loading data. |
+| `Conectado. Bases de datos cargadas.` | All 7 sheets are loaded; the app is ready to search. |
+| `Actualizando bases de datos...` | A refresh is in progress. |
+| `Bases de datos actualizadas.` | Refresh completed successfully. |
+| `Error al conectar. Ver detalle.` | Authentication or network failure; a dialog shows the detail. |
+
+### DNI field
+
+The entry field next to the **DNI:** label accepts only digit characters. Validation runs on every keystroke via `_validar_entrada_dni` — any non-digit character is silently rejected before it can appear in the field. The field accepts an empty value so you can clear it with Backspace.
+
+<Tip>
+The DNI field binds the `<Return>` key to `buscar_dni()`. You can type a DNI and press **Enter** to search without reaching for the mouse.
+</Tip>
+
+### Buscar button
+
+Clicking **Buscar** (or pressing Enter in the DNI field) calls `buscar_dni()`. It clears the results area, then iterates over all 7 sheets in order, writing each match to the text area as it is found. If no match exists across any sheet, a not-found message is written instead.
+
+### Actualizar bases de datos button
+
+Clicking **Actualizar bases de datos** calls `actualizar_bases()`, which spawns a background thread (`_actualizar_bases_hilo`) that re-fetches all rows from Google Sheets. Controls are disabled while the refresh runs and re-enabled once it completes. If the initial connection has not finished yet, a warning dialog is shown instead.
+
+### Results area
+
+Search output is displayed in a `ScrolledText` widget at the bottom of the window. It is configured as read-only (state `"disabled"` between writes) with a monospace **Consolas 10pt** font so columns align cleanly. After each write, `see("end")` is called to keep the latest result visible without manual scrolling.
+
+## Threading model
+
+`BuscadorApp` uses Python's `threading.Thread` with `daemon=True` for all blocking I/O:
+
+- **Initial connection** — `_conectar_en_hilo()` starts `_conectar()` in a daemon thread the moment `__init__` runs.
+- **Data refresh** — `actualizar_bases()` starts `_actualizar_bases_hilo()` in a new daemon thread.
+
+In both cases, controls are disabled via `_set_controles_habilitados(False)` before the thread starts. State updates and control re-enabling are always scheduled back onto the main thread with `root.after(0, ...)`, which is the only thread-safe way to update Tkinter widgets. This pattern ensures the event loop is never blocked and the UI never freezes regardless of how long the network call takes.
+
+## Error handling
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Connection or authentication failure | `messagebox.showerror` dialog with the full exception message; status bar set to `Error al conectar. Ver detalle.` |
+| Search or refresh before connection completes | `messagebox.showwarning` dialog: `Todavia no se completo la conexion inicial.` |
+| Row with insufficient columns | Skipped silently (`len(dato) <= col_dni` guard); does not raise an exception. |

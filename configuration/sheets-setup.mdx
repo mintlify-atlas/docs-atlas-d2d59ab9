@@ -1,0 +1,85 @@
+---
+title: "Configure Your Google Sheets Spreadsheet for IMDEL"
+sidebarTitle: "Sheets Setup"
+description: "Set up the Google Sheets spreadsheet with the correct worksheet order and column layout required by Proyecto Sheets to find beneficiaries."
+---
+
+Proyecto Sheets connects to a single spreadsheet identified by the constant `SHEET_NAME = "Tablas IMDEL Prototipo"` and loads all data at startup via `get_all_values()`. The application expects **exactly 7 worksheets** accessed by their zero-based index position — not by name — so the order of tabs inside Google Sheets is critical. Each worksheet stores the beneficiary's DNI in a different column; those column positions are also fixed.
+
+## Spreadsheet name
+
+Both entry points resolve the spreadsheet by the `SHEET_NAME` constant:
+
+```python
+# interfaz_prueba.py
+SHEET_NAME = "Tablas IMDEL Prototipo"
+# ...
+self.proyecto_sheets = self.gc.open(SHEET_NAME)
+```
+
+```python
+# main.py
+proyecto_sheets = gc.open("Tablas IMDEL Prototipo")
+```
+
+To point the application at a different spreadsheet, update the `SHEET_NAME` constant in `interfaz_prueba.py` and the matching string literal in the `gc.open()` call in `main.py`. The spreadsheet must already be shared with the service account (see [Credentials](/configuration/credentials)).
+
+## Required worksheets
+
+The table below lists each worksheet in the order it must appear in Google Sheets (leftmost tab = index 0). All column indices are zero-based.
+
+| Index | Worksheet Name | DNI Column (0-based) | Key Fields Used | Program |
+|---|---|---|---|---|
+| 0 | Oficina de Empleo | 2 | col 1 (nombre) | Oficina de Empleo |
+| 1 | Desarrollo Agrario | 2 | col 0 (apellido), col 1 (nombre) | Huertas Familiares |
+| 2 | Registro Recepción | 6 | col 2 (apellido), col 3 (nombre) | Fortalecimiento de Trayectorias Laborales |
+| 3 | Inscripción Cuatrimestral | 5 | col 2 (apellido), col 3 (nombre) | Capacitación Laboral |
+| 4 | Formulario Inscripción | 39 | col 37 (nombre), col 38 (apellido) | Inserción Laboral |
+| 5 | Nominalización | 9 | col 7 (nombre), col 8 (apellido) | Plan Fines |
+| 6 | Usuarios | 5 | col 1 (apellido), col 2 (nombre) | Registro TREP |
+
+The worksheet objects are retrieved by index at startup:
+
+```python
+# main.py
+oficina_empleo           = proyecto_sheets.get_worksheet(0)
+desarrollo_agrario       = proyecto_sheets.get_worksheet(1)
+registro_recepcion       = proyecto_sheets.get_worksheet(2)
+inscripcion_cuatrimestral = proyecto_sheets.get_worksheet(3)
+formulario_inscripcion   = proyecto_sheets.get_worksheet(4)
+nominalizacion           = proyecto_sheets.get_worksheet(5)
+usuarios                 = proyecto_sheets.get_worksheet(6)
+```
+
+<Warning>
+  The worksheet **index** (tab order) is what the application uses to fetch data — worksheet names are never read by the code. If you reorder, insert, or delete tabs in Google Sheets the application will silently query the wrong sheet and produce incorrect or missing results. Always verify tab order after any structural change to the spreadsheet.
+</Warning>
+
+## DNI format notes
+
+Most worksheets store DNI values as plain digit strings. However, worksheets at index 4 (**Formulario Inscripción**), 5 (**Nominalización**), and 6 (**Usuarios**) may contain DNI values embedded in a longer string — for example mixed with formatting characters or surrounding text. Proyecto Sheets normalises these values before comparison using two helper functions:
+
+```python
+def _limpiar_recorte(valor, min_len):
+    """Extracts digits and drops the first 2 and the last digit found.
+    Used for Formulario Inscripción and Nominalización."""
+    if len(valor) >= min_len:
+        digitos = [c for c in valor if c.isdigit()]
+        if len(digitos) >= 10:
+            digitos = digitos[2:-1]
+        return "".join(digitos)
+    return valor
+
+
+def _limpiar_solo_digitos(valor, min_len):
+    """Extracts only the digit characters. Used for Usuarios."""
+    if len(valor) >= min_len:
+        return "".join(c for c in valor if c.isdigit())
+    return valor
+```
+
+Cleaning is applied on the first search that touches each row and the result is written back into the in-memory list (`dato[col_dni] = valor`). Subsequent searches on the same loaded dataset use the already-normalised value. This cache is reset whenever **Actualizar bases de datos** is used to reload data from the API.
+
+<Tip>
+  The GUI (`interfaz_prueba.py`) guards every row lookup with a length check (`if len(dato) <= col_dni: continue`) so rows that are shorter than the expected column count are silently skipped. The CLI (`main.py`) does not perform this check — malformed or short rows will raise an `IndexError` at runtime. If you encounter crashes in the CLI, inspect the raw sheet for rows with missing trailing columns and either pad them or add a length guard to the corresponding loop.
+</Tip>

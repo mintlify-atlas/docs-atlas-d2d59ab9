@@ -1,0 +1,89 @@
+---
+title: "Frequently Asked Questions – Proyecto Sheets"
+sidebarTitle: "FAQ"
+description: "Answers to common questions about connecting to Google Sheets, handling search errors, adding programs, and running Proyecto Sheets in production."
+---
+
+This page collects common questions from operators and developers working with Proyecto Sheets. Topics range from connection errors and missed search results to extending the tool with new programs and understanding how data is loaded and refreshed.
+
+<AccordionGroup>
+
+  <Accordion title="The app shows 'Error al conectar' on startup.">
+    This error means `BuscadorApp._conectar()` raised an exception before it could open the spreadsheet. The three most common causes are:
+
+    1. **Wrong credentials file path.** The `CREDENTIALS_FILE` constant in `interfaz_prueba.py` must match the exact filename of your Google service account JSON key. By default it is set to `"proyecto-sheets-505320-bb8ae069f096.json"`. If you renamed the file or placed it in a subdirectory, update the constant accordingly.
+
+    2. **Service account not shared on the spreadsheet.** Open the Google Sheets document, click **Share**, and add the service account's email address (found inside the JSON key file under `"client_email"`) with at least **Viewer** permission.
+
+    3. **Google Sheets API not enabled.** In the Google Cloud Console, navigate to *APIs & Services → Library* and confirm that the **Google Sheets API** is enabled for the project that owns the service account.
+
+    After fixing any of the above, restart the application. The connection attempt runs automatically on startup inside a background thread.
+  </Accordion>
+
+  <Accordion title="The search returns no results but the person is registered.">
+    This is almost always a DNI format mismatch between what was typed and what is stored in the cell. Work through the following checks:
+
+    1. **Inspect the raw cell value.** Open the spreadsheet, navigate to the relevant worksheet, and look at the exact content of the DNI cell for that row. Copy it and compare it character-by-character with the search input.
+
+    2. **Check the `min_len` threshold.** `_limpiar_recorte` only normalizes values whose `len(valor) >= min_len`. All current entries use `min_len: 9`. If the raw cell value is shorter (e.g. an 8-digit legacy DNI stored without any prefix), the function returns it unchanged and the comparison may still fail if the format differs.
+
+    3. **Verify `col_dni`.** Confirm that the `col_dni` index in the `SHEETS_CONFIG` entry for that worksheet points to the correct column. A misaligned index means the app is reading a completely different cell.
+
+    4. **Check for leading/trailing whitespace.** `gspread` returns cell values as plain strings; any accidental space in the spreadsheet cell will prevent an exact match. The cleaning functions strip non-digit characters, but only when the value meets `min_len`.
+  </Accordion>
+
+  <Accordion title="Can I add a new program or worksheet?">
+    Yes. The search loop in `interfaz_prueba.py` is fully data-driven through `SHEETS_CONFIG`, so adding a new program requires only a new descriptor dict — no other code changes in `interfaz_prueba.py`.
+
+    1. Append a new entry to `SHEETS_CONFIG` with the correct `worksheet_index`, `col_dni`, `limpiar` function, `min_len`, and `formatear` lambda. See the [SHEETS_CONFIG reference](/reference/sheets-config) for a complete example.
+    2. If you also use the CLI (`main.py`), add the corresponding manual loop there as well. Unlike `interfaz_prueba.py`, `main.py` does not read `SHEETS_CONFIG` — each worksheet is handled by its own explicit `for` loop.
+
+    Make sure the service account has access to the spreadsheet tab before deploying the change.
+  </Accordion>
+
+  <Accordion title="The GUI controls are grayed out.">
+    On startup, `BuscadorApp._conectar_en_hilo()` disables the DNI entry field, **Buscar**, and **Actualizar bases de datos** while the connection to Google Sheets is being established in a background thread. The same disable/enable cycle happens when **Actualizar bases de datos** is pressed.
+
+    Controls re-enable automatically once `_conectar()` or `_actualizar_bases_hilo()` completes — successfully or with an error. If the controls remain grayed out indefinitely, check your network connection and look for an error dialog that may have appeared behind the main window.
+  </Accordion>
+
+  <Accordion title="Can I change the spreadsheet name?">
+    Yes. The spreadsheet name is stored in two places:
+
+    - **GUI (`interfaz_prueba.py`):** update the `SHEET_NAME` constant near the top of the file:
+      ```python
+      SHEET_NAME = "Tablas IMDEL Prototipo"  # change this value
+      ```
+    - **CLI (`main.py`):** update the argument passed to `gc.open()`:
+      ```python
+      proyecto_sheets = gc.open("Tablas IMDEL Prototipo")  # change this value
+      ```
+
+    After renaming, ensure that the service account email has been granted access to the new spreadsheet. The tab order and column layout inside the new spreadsheet must also match the `worksheet_index` and `col_dni` values in `SHEETS_CONFIG`, otherwise searches will return incorrect or empty results.
+  </Accordion>
+
+  <Accordion title="Does the app write any data back to Google Sheets?">
+    No. Both `main.py` and `interfaz_prueba.py` are strictly read-only. They call `gspread`'s `get_all_values()` to load data into memory, but they never call any write methods such as `update()`, `append_row()`, `insert_row()`, or `batch_update()`. The only mutations that occur are in-memory: cleaned DNI values are written back into the local row lists cached in `self.registros`, but this never touches the remote spreadsheet.
+  </Accordion>
+
+  <Accordion title="How do I update data without restarting?">
+    Press the **Actualizar bases de datos** button in the GUI. This calls `actualizar_bases()`, which runs `_cargar_datos()` in a background thread. `_cargar_datos()` iterates over every entry in `SHEETS_CONFIG` and calls `get_all_values()` on each worksheet, replacing the entire in-memory cache in `self.registros`.
+
+    In the CLI (`main.py`), enter option `2` at the prompt. This calls `actualizar_bases()`, which re-fetches all seven worksheets and reassigns the global `registros_*` variables.
+
+    Both paths also reset any in-place DNI normalization that had been cached during the previous session, because the raw data is fetched fresh from Google Sheets.
+  </Accordion>
+
+  <Accordion title="The app is slow to start. How can I speed it up?">
+    Startup time is dominated by the `get_all_values()` calls that load all rows from every worksheet into memory. Two practical steps can reduce it:
+
+    1. **Archive old records.** Move completed or inactive beneficiary rows to a separate spreadsheet or to a hidden archival tab that is not referenced by `SHEETS_CONFIG`. Fewer rows means less data to transfer on each load.
+
+    2. **Reduce network latency.** The app communicates directly with Google's Sheets API over HTTPS. Run the app on a machine with a stable, low-latency internet connection. Avoid shared or throttled networks.
+
+    <Tip>
+      You can also reduce the number of worksheets loaded at startup by removing entries from `SHEETS_CONFIG` for programs that are no longer active. Each removed entry eliminates one `get_all_values()` round-trip.
+    </Tip>
+  </Accordion>
+
+</AccordionGroup>

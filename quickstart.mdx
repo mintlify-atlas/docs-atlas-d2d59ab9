@@ -1,47 +1,119 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Proyecto Sheets in 5 Steps"
+sidebarTitle: "Quickstart"
+description: "Install dependencies, configure your Google service account, and run your first DNI search with Proyecto Sheets in under 10 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+By the end of this page you will have Proyecto Sheets cloned, its single dependency installed, your Google service account credentials in place, and the application running — ready to search beneficiary records by DNI from either the command line or the desktop GUI.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+
+  <Step title="Clone the Repository">
+    Download the project source to your local machine and move into the project directory.
 
     ```bash
-    npm install your-package
+    git clone https://github.com/LucaFFortin/proyecto_sheets.git && cd proyecto_sheets
     ```
+
+    The project root contains two runnable entry points: `main.py` (CLI) and `interfaz_prueba.py` (GUI). Your credentials file will also go here in the next step.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Install Dependencies">
+    Proyecto Sheets has a single third-party dependency: [`gspread`](https://docs.gspread.org). `tkinter` is part of the Python standard library and requires no separate install on most platforms.
+
+    <CodeGroup>
+
+    ```bash pip
+    pip install gspread
+    ```
+
+    ```bash pip3
+    pip3 install gspread
+    ```
+
+    </CodeGroup>
+
+    On Debian/Ubuntu, if the GUI fails to launch with a `ModuleNotFoundError` for `tkinter`, install it with:
 
     ```bash
-    your-cli init
+    sudo apt-get install python3-tk
     ```
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Add Your Credentials File">
+    Proyecto Sheets authenticates with Google Sheets using a **service account JSON key file**. Place this file in the project root and ensure its name matches the `CREDENTIALS_FILE` constant defined at the top of `interfaz_prueba.py`:
+
+    ```python
+    CREDENTIALS_FILE = "proyecto-sheets-505320-bb8ae069f096.json"
+    ```
+
+    If you generate a new key file with a different name, update this constant (and the matching `filename=` argument in `main.py`) to reflect the new filename.
+
+    <Warning>
+      The credentials file contains a private key that grants full API access to your Google Cloud project. It is already listed in `.gitignore` — **never commit it to version control or share it publicly.** If the key is exposed, revoke it immediately in the Google Cloud Console and generate a replacement.
+    </Warning>
+  </Step>
+
+  <Step title="Share the Spreadsheet with Your Service Account">
+    The tool connects to the spreadsheet identified by the `SHEET_NAME` constant:
+
+    ```python
+    SHEET_NAME = "Tablas IMDEL Prototipo"
+    ```
+
+    For the connection to succeed, the **service account email** (found inside the credentials JSON under the `"client_email"` key) must have at least **Viewer** access to this spreadsheet. Open the spreadsheet in Google Sheets, click **Share**, paste the service account email, and grant Viewer (or Editor) access.
+
+    If the spreadsheet name ever changes, update `SHEET_NAME` in both `main.py` and `interfaz_prueba.py` to match.
+
+    For detailed instructions on creating a service account and enabling the Sheets API, see [Service Account Configuration](/configuration/credentials).
+  </Step>
+
+  <Step title="Run the App">
+    Choose the interface that fits your workflow.
+
+    **GUI (recommended for day-to-day use)**
 
     ```bash
-    your-cli start
+    python interfaz_prueba.py
     ```
+
+    The window opens and connects to Google Sheets in the background. Once the status bar reads **"Conectado. Bases de datos cargadas."**, type a DNI into the field and press **Buscar** or hit Enter.
+
+    **CLI (for scripting and testing)**
+
+    ```bash
+    python main.py
+    ```
+
+    The CLI connects, loads all worksheets, then presents an interactive menu:
+
+    ```
+    Conectando a Google Sheets...
+    Cargando hojas...
+    Cargando datos de las hojas...
+    Que desea hacer?
+    1. Buscar otro DNI
+    2. Actualizar bases de datos
+    3. Salir del programa
+    Ingrese el numero de la opcion: 1
+
+    Ingrese DNI de la persona que quiere buscar: 12345678
+    Apellido y nombre: GARCIA MARIA
+    Coordinacion: Capacitacion laboral y empleo
+    Programa: Capacitacion laboral
+
+    Que desea hacer?
+    1. Buscar otro DNI
+    2. Actualizar bases de datos
+    3. Salir del programa
+    Ingrese el numero de la opcion: 3
+    ```
+
+    Enter `1` to search, `2` to re-fetch all data from Google Sheets, or `3` to exit.
+
+    <Tip>
+      Use the **GUI** (`interfaz_prueba.py`) for day-to-day lookups — it loads data on a background thread so the window stays responsive, and the **Actualizar bases de datos** button lets you refresh without restarting the app. Use the **CLI** (`main.py`) when you need to script searches, pipe output to other tools, or quickly verify that your credentials and spreadsheet configuration are working correctly.
+    </Tip>
   </Step>
+
 </Steps>
-
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>

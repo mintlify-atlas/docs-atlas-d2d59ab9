@@ -1,0 +1,128 @@
+---
+title: "How Proyecto Sheets Searches for Beneficiaries by DNI"
+sidebarTitle: "Search Logic"
+description: "Understand the exact matching logic, DNI normalization steps, and per-sheet column mapping used when Proyecto Sheets searches all 7 worksheets."
+---
+
+Every search in Proyecto Sheets — whether triggered from the CLI menu or the GUI's Buscar button — follows the same core algorithm: iterate over all rows in all 7 worksheets in declaration order, apply any sheet-specific cleaning function to the DNI column, then compare the cleaned value to the user-supplied string using strict equality. No fuzzy matching, prefix matching, or case folding is involved.
+
+## Search flow
+
+<Steps>
+  <Step title="Accept a validated DNI string">
+    The user supplies a sequence of digit characters. Both the CLI (`str.isdigit()` loop) and the GUI (`_validar_entrada_dni` per-keystroke validator) guarantee that only digits reach the search routine.
+  </Step>
+
+  <Step title="Iterate over each sheet in SHEETS_CONFIG order">
+    For each of the 7 sheets, the search reads `col_dni` from every row in the in-memory cache. If a cleaning function (`limpiar`) is configured for the sheet, it is applied to the raw cell value before comparison:
+
+    ```python
+    valor = dato[col_dni]
+    if limpiar_fn is not None:
+        valor = limpiar_fn(valor, min_len)
+        dato[col_dni] = valor   # cached in-place
+    ```
+
+    The cleaned value is then compared with the target DNI:
+
+    ```python
+    if valor == dni_buscar:
+        encontrado = True
+        contador += 1
+    ```
+  </Step>
+
+  <Step title="Emit match output">
+    When a match is found on a given sheet:
+    - If `contador == 1`: the row is formatted using the sheet's `formatear` function and written to output.
+    - If `contador > 1` (multiple rows in the same sheet share the DNI): an additional line `Se encontro al beneficiario N veces` is appended after the first match.
+
+    The counter resets to `0` between sheets, so each sheet is counted independently.
+  </Step>
+
+  <Step title="Report not-found if no match across all sheets">
+    After all 7 sheets have been checked, if `encontrado` is still `False`, the following message is emitted:
+
+    ```text
+    El DNI ingresado 12345678 no se encontro en las bases de datos.
+    ```
+  </Step>
+</Steps>
+
+## Per-sheet column mapping
+
+Each entry in `SHEETS_CONFIG` maps a worksheet to a zero-based DNI column index and an optional cleaning function.
+
+| Sheet | `worksheet_index` | `col_dni` | Cleaning function | `min_len` |
+|-------|:-----------------:|:---------:|-------------------|:---------:|
+| `oficina_empleo` | 0 | 2 | `_limpiar_recorte` | 9 |
+| `desarrollo_agrario` | 1 | 2 | `_limpiar_recorte` | 9 |
+| `registro_recepcion` | 2 | 6 | `_limpiar_recorte` | 9 |
+| `inscripcion_cuatrimestral` | 3 | 5 | `_limpiar_recorte` | 9 |
+| `formulario_inscripcion` | 4 | 39 | `_limpiar_recorte` | 9 |
+| `nominalizacion` | 5 | 9 | `_limpiar_recorte` | 9 |
+| `usuarios` | 6 | 5 | `_limpiar_recorte` | 9 |
+
+`_limpiar_recorte(valor, min_len)` is applied when `len(valor) >= min_len`. It extracts all digit characters from the raw cell string, then — when 10 or more digits are present — discards the first two and the last digit. This strips the surrounding metadata that Google Forms encodes around the DNI in certain response columns (e.g. a raw value like `ar:12345678X` becomes `12345678`):
+
+```python
+def _limpiar_recorte(valor, min_len):
+    if len(valor) >= min_len:
+        digitos = [c for c in valor if c.isdigit()]
+        if len(digitos) >= 10:
+            digitos = digitos[2:-1]
+        return "".join(digitos)
+    return valor
+```
+
+## Result output format
+
+When a match is found, the `formatear` lambda for each sheet determines the output. The patterns used across all sheets are:
+
+```text
+# oficina_empleo
+Apellido y nombre: GARCIA JUAN
+Programa: Oficina empleo
+
+# desarrollo_agrario
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Desarrollo agrario
+Programa: Huertas familiares
+
+# registro_recepcion
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Capacitacion laboral y empleo
+Programa: Fortalecimiento de Trayectorias Laborales
+
+# inscripcion_cuatrimestral
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Capacitacion laboral y empleo
+Programa: Capacitacion laboral
+
+# formulario_inscripcion
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Capacitacion laboral y empleo
+Programa: Insercion laboral
+
+# nominalizacion
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Capacitacion laboral y empleo
+Programa: Plan fines
+
+# usuarios
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Economia popular
+Programa: Registro de Trabajadores de la Economia Popular
+```
+
+The GUI appends a `----------------------------------------` separator after each sheet's results block for readability.
+
+## In-memory caching
+
+`get_all_values()` is called once per worksheet — at startup (or explicitly on refresh) — and the results are stored in the `registros` dictionary (GUI) or module-level variables (CLI). All subsequent searches read directly from this in-memory cache, so no network request is made per search. This keeps individual lookups fast regardless of spreadsheet size.
+
+To sync the cache with the live spreadsheet, use option `2` in the CLI menu or click **Actualizar bases de datos** in the GUI. Both paths call `get_all_values()` again on every worksheet and overwrite the existing cache.
+
+<Note>
+The cleaning function writes the normalised value back into the cached row in place: `dato[col_dni] = valor_limpio`. This means the very first search against a session's cache also cleans every DNI cell that meets the `min_len` threshold. All subsequent searches in the same session operate on the already-cleaned values, so the cleaning logic runs at most once per row per session — unless the cache is refreshed with "Actualizar".
+</Note>

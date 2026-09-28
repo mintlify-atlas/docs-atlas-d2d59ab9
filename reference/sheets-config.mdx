@@ -1,0 +1,137 @@
+---
+title: "SHEETS_CONFIG: Worksheet Descriptor Reference"
+sidebarTitle: "SHEETS_CONFIG"
+description: "Complete reference for the SHEETS_CONFIG list in interfaz_prueba.py, documenting every key, its type, and the seven worksheet descriptors."
+---
+
+`SHEETS_CONFIG` is the central configuration list in `interfaz_prueba.py` that drives the entire search loop. Each entry is a plain Python dictionary that describes one worksheet: where to find it inside the Google Sheets document, which column holds the DNI, how to normalize that value before comparison, and how to format the result string shown to the operator. The `BuscadorApp` class iterates over this list at startup to open worksheets, at cache-load time to call `get_all_values()`, and on every search to apply cleaning and matching logic — no sheet-specific code lives outside of `SHEETS_CONFIG`.
+
+## Descriptor keys
+
+<ParamField path="nombre_interno" type="string" required>
+  Internal identifier for the worksheet. Used as the key when storing the worksheet handle in `self.worksheets` and the row cache in `self.registros`. Must be unique across all entries.
+</ParamField>
+
+<ParamField path="worksheet_index" type="int" required>
+  Zero-based index passed to `proyecto_sheets.get_worksheet(index)` to open the correct tab. Index `0` is the leftmost tab in the spreadsheet.
+</ParamField>
+
+<ParamField path="col_dni" type="int" required>
+  Zero-based column index of the DNI field within each row list returned by `get_all_values()`. For example, `col_dni: 2` means `dato[2]` is the DNI cell.
+</ParamField>
+
+<ParamField path="limpiar" type="callable" optional>
+  A function with the signature `(valor: str, min_len: int) -> str` applied to the raw cell value before it is compared with the search input. If `None` (or omitted), the raw value is compared directly. The cleaned value is written back into the row list to cache the result for subsequent searches in the same session.
+</ParamField>
+
+<ParamField path="min_len" type="int" optional>
+  Minimum string length that triggers the cleaning function. Passed as the second argument to `limpiar`. Required whenever `limpiar` is set.
+</ParamField>
+
+<ParamField path="formatear" type="callable" required>
+  A function `(dato: list[str]) -> str` that receives the matched row list and returns the human-readable result string displayed in the GUI or printed in the CLI. Column indices referenced inside this lambda must be consistent with the actual spreadsheet layout.
+</ParamField>
+
+---
+
+## All seven descriptors
+
+```python
+SHEETS_CONFIG = [
+    {
+        "nombre_interno": "oficina_empleo",
+        "worksheet_index": 0,
+        "col_dni": 2,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[1]}\nPrograma: Oficina empleo",
+    },
+    {
+        "nombre_interno": "desarrollo_agrario",
+        "worksheet_index": 1,
+        "col_dni": 2,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[1]} {dato[0]}\nCoordinacion: Desarrollo agrario\nPrograma: Huertas familiares",
+    },
+    {
+        "nombre_interno": "registro_recepcion",
+        "worksheet_index": 2,
+        "col_dni": 6,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[3]} {dato[2]}\nCoordinacion: Capacitacion laboral y empleo\nPrograma: Fortalecimiento de Trayectorias Laborales",
+    },
+    {
+        "nombre_interno": "inscripcion_cuatrimestral",
+        "worksheet_index": 3,
+        "col_dni": 5,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[3]} {dato[2]}\nCoordinacion: Capacitacion laboral y empleo\nPrograma: Capacitacion laboral",
+    },
+    {
+        "nombre_interno": "formulario_inscripcion",
+        "worksheet_index": 4,
+        "col_dni": 39,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[37]} {dato[38]}\nCoordinacion: Capacitacion laboral y empleo\nPrograma: Insercion laboral",
+    },
+    {
+        "nombre_interno": "nominalizacion",
+        "worksheet_index": 5,
+        "col_dni": 9,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[7]} {dato[8]}\nCoordinacion: Capacitacion laboral y empleo\nPrograma: Plan fines",
+    },
+    {
+        "nombre_interno": "usuarios",
+        "worksheet_index": 6,
+        "col_dni": 5,
+        "limpiar": _limpiar_recorte,
+        "min_len": 9,
+        "formatear": lambda dato: f"Apellido y nombre: {dato[2]} {dato[1]}\nCoordinacion: Economia popular\nPrograma: Registro de Trabajadores de la Economia Popular",
+    },
+]
+```
+
+---
+
+## Adding a new worksheet
+
+To register an additional program, append a new descriptor dict to `SHEETS_CONFIG`. The example below adds a hypothetical "Becas municipales" sheet that lives on the eighth tab (`worksheet_index: 7`) and stores the DNI in column 3 (`col_dni: 3`).
+
+```python
+{
+    # Unique internal key — used in self.worksheets and self.registros
+    "nombre_interno": "becas_municipales",
+
+    # Tab position in the Google Sheets document (0-based, leftmost = 0)
+    "worksheet_index": 7,
+
+    # 0-based column index of the DNI cell in each row returned by get_all_values()
+    "col_dni": 3,
+
+    # Cleaning function to normalize the raw cell value before comparison
+    "limpiar": _limpiar_recorte,
+
+    # Minimum raw string length that triggers cleaning
+    "min_len": 9,
+
+    # Lambda that maps a matched row list to the display string
+    # dato[1] = apellido, dato[2] = nombre (adjust indices to match your sheet)
+    "formatear": lambda dato: (
+        f"Apellido y nombre: {dato[1]} {dato[2]}\n"
+        f"Coordinacion: Secretaria de Educacion\n"
+        f"Programa: Becas municipales"
+    ),
+},
+```
+
+After adding the entry, no other code changes are needed in `interfaz_prueba.py` — the generic search loop picks it up automatically. If you also use the CLI (`main.py`), you must add a corresponding manual loop there as well, since `main.py` does not read `SHEETS_CONFIG`.
+
+<Warning>
+  The `worksheet_index` values must match the actual tab order in the Google Sheets document. If a sheet administrator reorders tabs inside Google Sheets, the indices will shift and all affected lookups will query the wrong worksheet silently. Always verify tab positions after any structural change to the spreadsheet.
+</Warning>

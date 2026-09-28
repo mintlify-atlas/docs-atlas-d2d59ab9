@@ -1,0 +1,83 @@
+---
+title: "Run DNI Searches from the Terminal with main.py"
+sidebarTitle: "CLI Mode"
+description: "Use main.py to search IMDEL beneficiary records interactively from the command line, with options to refresh data and exit gracefully."
+---
+
+`main.py` is the original entry point for Proyecto Sheets. When launched, it immediately authenticates with Google Sheets, loads all seven worksheets into memory, and then drops you into an interactive loop where you can search by DNI, refresh the cached data, or exit. No GUI or additional dependencies beyond `gspread` are required.
+
+## Launching
+
+Run the script directly from your project directory:
+
+```bash
+python main.py
+```
+
+On a successful startup you will see the following output before the menu appears:
+
+```text
+Conectando a Google Sheets...
+Cargando hojas...
+Cargando datos de las hojas...
+Que desea hacer?
+1. Buscar otro DNI
+2. Actualizar bases de datos
+3. Salir del programa
+Ingrese el numero de la opcion:
+```
+
+<Note>
+On startup `main.py` calls `get_all_values()` on all 7 worksheets sequentially. Depending on network speed and spreadsheet size, this initial load can take several seconds. The program will not show the menu until all data has finished loading.
+</Note>
+
+## Menu options
+
+The interactive loop accepts three numeric options. Any other input prints an error and re-displays the prompt.
+
+| Option | Label | Description |
+|--------|-------|-------------|
+| `1` | Buscar otro DNI | Prompts for a DNI number, searches every sheet in order, and prints any matches found. |
+| `2` | Actualizar bases de datos | Re-fetches all rows from Google Sheets by calling `get_all_values()` on every worksheet and replaces the in-memory cache. Prints `Bases de datos actualizadas.` on completion. |
+| `3` | Salir del programa | Breaks out of the loop and terminates the process cleanly. |
+
+## Example search session
+
+Below is a realistic terminal interaction. The user searches for DNI `12345678`, which appears in two programs:
+
+```text
+Ingrese el numero de la opcion: 1
+Ingrese DNI de la persona que quiere buscar: 12345678
+
+Apellido y nombre: GARCIA JUAN
+Programa: Oficina empleo
+
+Apellido y nombre: GARCIA JUAN
+Coordinacion: Capacitacion laboral y empleo
+Programa: Capacitacion laboral
+Se encontro al beneficiario 2 veces
+```
+
+If the DNI is not present in any sheet:
+
+```text
+Ingrese el numero de la opcion: 1
+Ingrese DNI de la persona que quiere buscar: 99999999
+El DNI ingresado 99999999 no se encontro en las bases de datos.
+```
+
+## DNI validation
+
+Before any search is executed, `main.py` validates that the input contains only digit characters using Python's built-in `str.isdigit()`. If letters, spaces, or punctuation are entered, the program prints an error and re-prompts — the menu option loop does not continue until a valid DNI is supplied:
+
+```text
+Ingrese DNI de la persona que quiere buscar: 12.345.678
+DNI invalido. Ingrese solo numeros (12345678).
+Ingrese DNI de la persona que quiere buscar:
+```
+
+Enter the DNI as a plain sequence of digits with no dots, dashes, or spaces (e.g. `12345678`).
+
+<Warning>
+Rows with fewer columns than expected will raise an `IndexError` in the CLI because `main.py` accesses fixed column indices without a bounds check. The GUI (`interfaz_prueba.py`) skips such rows with a `len(dato) <= col_dni` guard. For production use on spreadsheets that may contain incomplete rows, prefer the GUI.
+</Warning>
